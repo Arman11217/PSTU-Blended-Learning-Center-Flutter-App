@@ -15,9 +15,11 @@ import '../../services/course_service.dart';
 import '../../services/exam_system_service.dart';
 import '../../services/lecture_qa_service.dart';
 import '../../services/student_dashboard_service.dart';
+//import '../../models/user_model.dart';
 
 class StudentDashboard extends StatefulWidget {
   const StudentDashboard({Key? key}) : super(key: key);
+
 
   @override
   State<StudentDashboard> createState() => _StudentDashboardState();
@@ -558,6 +560,19 @@ class _CoursesTabState extends State<CoursesTab> {
     final submissions = await _assignmentService.getStudentSubmissions(user.uid);
     final submissionIds = submissions.map((s) => s.assignmentId).toSet();
 
+    // Fetch teacher full names (teacherId -> users.fullName) to show correct UI names
+    final teacherIds = <String>{
+      for (final c in enrolledCourses) c.teacherId,
+      for (final c in allCourses.where((c) => c.isPublic && !enrolledIds.contains(c.id))) c.teacherId,
+    }..removeWhere((id) => id.trim().isEmpty);
+
+    final authService = AuthService();
+    final teacherNameById = <String, String>{};
+    for (final tid in teacherIds) {
+      final user = await authService.getUserInfo(tid);
+      teacherNameById[tid] = (user?.fullName.trim().isNotEmpty == true) ? user!.fullName.trim() : 'Unknown';
+    }
+
     final enrolled = <_StudentCourseCardVm>[];
     for (final course in enrolledCourses) {
       final assignments = await _assignmentService.getAssignmentsByCourse(course.id);
@@ -566,11 +581,12 @@ class _CoursesTabState extends State<CoursesTab> {
       final total = assignments.length;
       final progress = total == 0 ? 0 : ((submittedCount / total) * 100).round();
 
+      final teacherFullName = teacherNameById[course.teacherId] ?? 'Unknown';
       enrolled.add(
         _StudentCourseCardVm(
           course: course,
           progress: progress,
-          teacherName: 'Dr. ${course.teacherId.isEmpty ? 'Unknown' : course.teacherId.substring(0, course.teacherId.length > 6 ? 6 : course.teacherId.length)}',
+          teacherName: '{$teacherFullName}',
         ),
       );
     }
@@ -580,13 +596,13 @@ class _CoursesTabState extends State<CoursesTab> {
         .map(
           (course) => _CourseDiscoverVm(
             course: course,
-            teacherName:
-                'Dr. ${course.teacherId.isEmpty ? 'Unknown' : course.teacherId.substring(0, course.teacherId.length > 6 ? 6 : course.teacherId.length)}',
+            teacherName: '${teacherNameById[course.teacherId] ?? 'Unknown'} ',
           ),
         )
         .toList();
 
     return _StudentCoursesData(enrolled: enrolled, discover: discover);
+
   }
 
   Future<void> _enrollCourse(Course course) async {
